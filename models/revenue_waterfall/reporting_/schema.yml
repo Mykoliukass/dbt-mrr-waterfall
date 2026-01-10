@@ -1,0 +1,94 @@
+# models/marts/schema.yml
+version: 2
+
+models:
+  - name: mrr_waterfall
+    description: |
+      Monthly MRR waterfall report showing all revenue movements including 
+      new subscriptions, churned accounts, and key SaaS growth metrics.
+      
+      This model combines data from three intermediate models:
+      - int_mrr_initial: Starting MRR from active subscriptions
+      - int_mrr_new_subscriptions: New MRR added during the month
+      - int_mrr_churn: MRR lost from churned subscriptions
+      
+      **Use cases:**
+      - Executive dashboards and investor reporting
+      - Monthly business reviews
+      - SaaS metric analysis and forecasting
+      
+    meta:
+      owner: "finance_team"
+      
+    columns:
+      - name: month
+        description: "First day of the calendar month"
+        tests:
+          - unique
+          - not_null
+      
+      - name: initial_subscription_count
+        description: "Number of active subscriptions at the beginning of the month"
+        tests:
+          - not_null
+      
+      - name: starting_mrr
+        description: "Total MRR from all active subscriptions at the start of the month"
+        tests:
+          - not_null
+      
+      - name: new_subscription_count
+        description: "Number of new subscriptions that started during this month"
+        tests:
+          - not_null
+      
+      - name: new_mrr
+        description: "Total MRR added from new subscriptions that started this month"
+        tests:
+          - not_null
+      
+      - name: churned_account_count
+        description: "Number of unique accounts that churned during this month"
+        tests:
+          - not_null
+      
+      - name: churned_mrr
+        description: "Total MRR lost from subscriptions that churned this month"
+        tests:
+          - not_null
+      
+      - name: total_refunds
+        description: "Total refund amount (USD) issued to churned customers this month"
+      
+      - name: ending_mrr
+        description: |
+          Total MRR at the end of the month.
+          Calculated as: starting_mrr + new_mrr - churned_mrr - total_refund
+        tests:
+          - not_null
+      
+      - name: new_mrr_growth_pct
+        description: |
+          New MRR as a percentage of starting MRR.
+          Formula: (new_mrr / starting_mrr) * 100
+          
+          Shows the growth rate from new customer acquisition.
+      
+      - name: churn_mrr_rate_pct
+        description: |
+          Monthly revenue churn rate as a percentage.
+          Formula: (churned_mrr / starting_mrr) * 100
+          
+          Industry benchmarks for SaaS:
+          - Excellent: < 5%
+          - Good: 5-7%
+          - Acceptable: 7-10%
+          - Concerning: > 10%
+      
+      - name: net_mrr_growth_pct
+        description: |
+          Net MRR growth rate as a percentage.
+          Formula: ((new_mrr - churned_mrr - total_refund) / starting_mrr) * 100
+          
+          Shows overall revenue health after accounting for churn.
+          Negative values indicate the business is losing more revenue than gaining.
