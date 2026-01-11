@@ -1,10 +1,10 @@
 version: 2
 
 models:
-  - name: stg_accounts
+  - name: raw_accounts
     description: >
-      Staging model for customer accounts. Contains cleaned and standardized account 
-      information including company details, signup information, and current status flags.
+      Raw source data for customer accounts loaded from accounts.csv.
+      Contains company details, signup information, and status flags.
     columns:
       - name: account_id
         description: Unique customer identifier (primary key)
@@ -36,17 +36,20 @@ models:
       - name: churn_flag
         description: Boolean flag indicating if account has ever churned
 
-  - name: stg_subscriptions
+  - name: raw_subscriptions
     description: >
-      Staging model for subscription data. Contains subscription lifecycle information,
-      billing details, and plan tier changes. One account can have multiple subscriptions
-      over time.
+      Raw source data for subscriptions loaded from subscriptions.csv.
+      Contains subscription lifecycle information, billing details, and plan tier changes.
     columns:
       - name: subscription_id
         description: Unique subscription identifier (primary key)
       
       - name: account_id
         description: Foreign key to accounts table
+        tests:
+          - relationships:
+              to: ref('raw_accounts')
+              field: account_id
       
       - name: start_date
         description: Subscription start date
@@ -84,16 +87,20 @@ models:
       - name: auto_renew_flag
         description: Boolean flag indicating if subscription auto-renews
 
-  - name: stg_feature_usage
+  - name: raw_feature_usage
     description: >
-      Staging model for product feature usage events. Contains detailed usage metrics
-      per subscription including frequency, duration, and error tracking.
+      Raw source data for product feature usage events loaded from feature_usage.csv.
+      Contains detailed usage metrics per subscription including frequency, duration, and error tracking.
     columns:
       - name: usage_id
         description: Unique usage event identifier (primary key)
       
       - name: subscription_id
         description: Foreign key to subscriptions table
+        tests:
+          - relationships:
+              to: ref('raw_subscriptions')
+              field: subscription_id
       
       - name: usage_date
         description: Date of usage event
@@ -113,16 +120,20 @@ models:
       - name: is_beta_feature
         description: Boolean flag indicating if feature is in beta (approximately 10%)
 
-  - name: stg_support_tickets
+  - name: raw_support_tickets
     description: >
-      Staging model for customer support tickets. Contains ticket lifecycle information,
-      priority levels, response times, and satisfaction metrics.
+      Raw source data for customer support tickets loaded from support_tickets.csv.
+      Contains ticket lifecycle information, priority levels, response times, and satisfaction metrics.
     columns:
       - name: ticket_id
         description: Unique support ticket identifier (primary key)
       
       - name: account_id
         description: Foreign key to accounts table
+        tests:
+          - relationships:
+              to: ref('raw_accounts')
+              field: account_id
       
       - name: submitted_at
         description: Timestamp when ticket was opened
@@ -145,16 +156,20 @@ models:
       - name: escalation_flag
         description: Boolean flag indicating if ticket was escalated
 
-  - name: stg_churn_events
+  - name: raw_churn_events
     description: >
-      Staging model for customer churn events. Contains information about when and why
-      customers left, including refund details and preceding subscription changes.
+      Raw source data for customer churn events loaded from churn_events.csv.
+      Contains information about when and why customers left, including refund details and preceding subscription changes.
     columns:
       - name: churn_event_id
         description: Unique churn event identifier (primary key)
       
       - name: account_id
         description: Foreign key to accounts table
+        tests:
+          - relationships:
+              to: ref('raw_accounts')
+              field: account_id
       
       - name: churn_date
         description: Date when account churned

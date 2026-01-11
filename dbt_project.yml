@@ -33,7 +33,7 @@ models:
   oxylabs_saastask:
     # Config indicated by + and applies to all files under models/example/
     revenue_waterfall:
-      +materialized: view
+      +materialized: ephemeral
       raw_:
         +materialized: ephemeral
       staging_:
@@ -41,4 +41,4 @@ models:
       intermediate_:
         +materialized: ephemeral
       reporting_:
-        +materialized: ephemeral
+        +materialized: table
