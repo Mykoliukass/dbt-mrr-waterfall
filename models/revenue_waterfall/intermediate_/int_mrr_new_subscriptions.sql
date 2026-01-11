@@ -18,6 +18,7 @@ new_subscription_months AS (
     FROM date_spine AS d
     INNER JOIN {{ ref('stg_subscriptions') }} AS s
         ON date_trunc('month', s.start_date) = d.month_start
+        AND s.is_trial = False
 )
 
 SELECT

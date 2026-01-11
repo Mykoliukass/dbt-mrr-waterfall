@@ -1,5 +1,3 @@
-{{ config(materialized='table') }}
-
 SELECT
     subscription_id,
     account_id,

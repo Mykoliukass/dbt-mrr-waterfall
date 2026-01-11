@@ -53,10 +53,16 @@ oxylabs_saastask/
 │   │   ├── stg_churn_events.sql
 │   │   └── schema.yml
 │   ├── intermediate_/           # Business logic transformations
-│   └── reporting_/              # Final analytics models
 │       └── rpt_mrr_waterfall.sql
+│   └── reporting_/              # Final analytics models
+│       ├── int_mrr_initial.sql
+│       ├── int_mrr_new_subscriptions.sql
+│       ├── int_mrr_churn.sql
+│       └── int_mrr_final.sql
 ├── tests/                       # Custom business logic tests
-│   └── test_churn_date_after_subscription_end.sql
+│   |── test_churn_date_after_subscription_end.sql
+│   |── test_assert_no_negative_mrr.sql
+│   └── test_assert_mrr_waterfall_integrity.sql
 ├── data/                        # CSV seed files
 │   ├── accounts.csv
 │   ├── subscriptions.csv
@@ -72,7 +78,7 @@ oxylabs_saastask/
 
 1. **Raw Layer (`raw_`)**: Direct representation of source CSV files, materialized as tables in DuckDB
 2. **Staging Layer (`staging_`)**: Cleaned and standardized data with consistent naming and typing
-3. **Intermediate Layer (`intermediate_`)**: Business logic transformations (if needed)
+3. **Intermediate Layer (`intermediate_`)**: Business logic transformations
 4. **Reporting Layer (`reporting_`)**: Final analytics models ready for consumption
 
 ### Data Relationships
@@ -97,15 +103,15 @@ cd oxylabs_saastask
 
 ### 2. Install dependencies
 ```bash
-pip install dbt-duckdb
+pip install dbt-core dbt-duckdb
 ```
 
 ### 3. Configure profiles.yml
 Update your `~/.dbt/profiles.yml` with the DuckDB configuration shown above.
 
-### 4. Load seed data
+### 4. Load CSV files to tables
 ```bash
-dbt seed
+dbt run --select models/raw_
 ```
 
 ### 5. Build all models
@@ -130,25 +136,25 @@ dbt test
 ### 2. Layered Architecture
 - **Raw Layer**: Preserves source data integrity, materialized as tables for testing
 - **Staging Layer**: Type casting, renaming, and basic cleansing
+- **Intermediate Layer**: Main business logic trnasformations
 - **Reporting Layer**: Business-ready aggregations and metrics
 
 ### 3. MRR Waterfall Logic
 The waterfall categorizes MRR movements into:
+- **Starting**: Revenue from new subscriptions that existed prior to current month
 - **New**: Revenue from new subscriptions that didn't exist in prior month
-- **Expansion**: Increased revenue from existing subscriptions (upgrades, seat additions)
-- **Contraction**: Decreased revenue from existing subscriptions (downgrades, seat reductions)
-- **Churn**: Lost revenue from subscriptions that ended
-- **Reactivation**: Revenue from previously churned accounts returning
+- **Churn**: Revenue lost from subscriptions that ended
+- **Refund**: Revenue lost due to refunds to churned users
 
 ### 4. Date Logic Assumptions
 - MRR is calculated on a monthly basis using subscription start/end dates
-- Active subscriptions (end_date IS NULL) contribute to current month MRR
+- Active subscriptions (end_date IS NULL or end_date > analyzed_month) contribute to analyzed month MRR
 - Subscription changes mid-month are attributed to the month of change
 - Trial subscriptions (is_trial = TRUE) are excluded from MRR calculations
 
 ## Data Quality Tests
 
-### Generic Tests (12 total)
+### Generic Tests (13 total)
 Implemented in `schema.yml` files using dbt's built-in test types:
 
 1. **Foreign Key Relationships** (4 tests):
@@ -157,7 +163,17 @@ Implemented in `schema.yml` files using dbt's built-in test types:
    - `raw_support_tickets.account_id` → `raw_accounts.account_id`
    - `raw_churn_events.account_id` → `raw_accounts.account_id`
 
-### Custom Business Logic Tests (1 test)
+2. **Uniqueness & Not Null Tests:** (9 tests)
+    - `month` - Unique (ensures no duplicate months) + Not Null
+    - `initial_subscription_count` - Not Null
+    - `starting_mrr` - Not Null
+    - `new_subscription_count` - Not Null
+    - `new_mrr` - Not Null
+    - `churned_account_count` - Not Null
+    - `churned_mrr` - Not Null
+    - `ending_mrr` - Not Null
+
+### Custom Business Logic Tests (3 test)
 Implemented in `tests/` folder:
 
 1. **Churn Date Validation**: 
@@ -165,7 +181,18 @@ Implemented in `tests/` folder:
    - Validates temporal consistency between subscription lifecycle and churn events
    - Located: `tests/test_churn_date_after_subscription_end.sql`
 
-**Total: 13 tests** (exceeds requirement of minimum 5)
+2. **MRR Waterfall Integrity**: 
+   - Validates that the waterfall calculation balances correctly
+   - Formula: ending_mrr = starting_mrr + new_mrr - churned_mrr - total_refunds
+   - Ensures mathematical accuracy of MRR movements with tolerance of ±$0.01 for rounding
+   - Located: `tests/test_assert_mrr_waterfall_integrity.sql`
+
+3. **No Negative MRR Values**: 
+   - Ensures all MRR amounts are non-negative (≥ 0)
+   - Validates: starting_mrr, new_mrr, churned_mrr, ending_mrr
+   - Located: `tests/test_assert_no_negative_mrr.sql`
+
+**Total: 17 tests** 
 
 ## Running Tests
 
@@ -189,28 +216,26 @@ dbt test --select test_churn_date_after_subscription_end
 
 1. **Monthly Granularity**: MRR is calculated at monthly level; intra-month changes are simplified
 2. **Multiple Subscriptions**: Accounts can have multiple overlapping subscriptions - current model sums all active subscriptions
-3. **Trial Handling**: Trials are flagged but not separated in revenue calculations
-4. **Currency**: All amounts assumed to be in USD with no currency conversion
-5. **Billing Frequency**: Annual subscriptions are converted to MRR (ARR/12) but this may not reflect actual cash collection timing
+3. **Trial Handling**: Trials are excluded from MRR calculation
+4. **Billing Frequency**: Annual subscriptions are converted to MRR (ARR/12) but this may not reflect actual cash collection timing
 
 ### Edge Cases Identified
 
 1. **Same-Month Start and End**: Subscriptions that start and end in the same month
-2. **Rapid Plan Changes**: Multiple upgrades/downgrades within a single month
-3. **Reactivations**: Previously churned accounts returning (flagged in churn_events)
-4. **Partial Month Revenue**: Pro-rating for mid-month starts/ends not implemented
-5. **Backdated Subscriptions**: Historical data loads where subscription dates precede signup_date
+2. **Upgrades/Downgrades**: No information is available about price changes with upgrades/downgrades
+3. **Backdated Subscriptions**: Historical data loads where subscription dates precede signup_date
 
 ## Production Improvements
 
 ### Scalability & Performance
-1. **Incremental Models**: Implement incremental materialization for large tables (subscriptions, feature_usage)
+1. **Incremental Models**: Implement incremental materialization for large tables (mrr_waterfall)
    ```sql
-   {{ config(materialized='incremental', unique_key='subscription_id') }}
+   {{ config(materialized='incremental', unique_key='month') }}
    ```
-2. **Partitioning**: Partition large tables by date (year/month) for better query performance
+2. **Partitioning**: Partition large tables by date (year/month) for better query performance (depends on used database).
 3. **Indexing Strategy**: Add indexes on frequently joined columns (account_id, subscription_id)
 4. **Query Optimization**: Use CTEs judiciously, consider materializing complex intermediate calculations
+5. **Orhcestration**: Use Airflow, add execution_date variable to dbt for incremental logic.
 
 ### Data Freshness & Incremental Strategies
 1. **Source Freshness Tests**: Implement dbt source freshness checks
@@ -223,7 +248,6 @@ dbt test --select test_churn_date_after_subscription_end
    ```
 2. **Incremental Loading**: 
    - Load only new/changed records based on `updated_at` timestamps
-   - Use `is_incremental()` macro to filter source data
 3. **Snapshot Models**: Use dbt snapshots for slowly changing dimensions (account attributes, plan tiers)
 
 ### Monitoring & Data Quality
@@ -247,17 +271,7 @@ dbt test --select test_churn_date_after_subscription_end
 1. **Environment Management**: Separate dev/staging/prod environments with different data samples
 2. **CI/CD Integration**: Run `dbt test` and `dbt build` in CI pipeline before deployment
 3. **Version Control**: Tag releases, maintain changelog for model changes
-4. **Access Control**: Implement role-based access to sensitive PII data
-5. **Backup Strategy**: Regular DuckDB file backups, consider migration to cloud warehouse (Snowflake/BigQuery) for production
 
 ## Repository
 
-GitHub: [Link to repository]
-
-## Contact
-
-Mykolas - Analytics Engineer Candidate
-
----
-
-*This project was completed as part of the Oxylabs Analytics Engineer technical assessment.*
+GitHub: [[Link to repository](https://github.com/Mykoliukass/dbt-mrr-waterfall/)]

@@ -22,6 +22,7 @@ subscription_months AS (
         ON
             d.month_start > s.start_date
             AND (s.end_date IS NULL OR d.month_start <= s.end_date)
+            AND s.is_trial = False
 )
 
 SELECT

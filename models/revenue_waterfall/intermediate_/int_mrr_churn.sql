@@ -29,7 +29,7 @@ churn_subscriptions AS (
         ON ce.account_id = s.account_id
         AND ce.churn_date >= s.start_date
         AND (s.end_date IS NULL OR ce.churn_date <= s.end_date)
-        AND s.churn_flag = TRUE
+        AND s.churn_flag = TRUE AND s.is_trial = False
 )
 
 SELECT
